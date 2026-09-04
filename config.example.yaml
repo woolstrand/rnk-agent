@@ -1,0 +1,35 @@
+# Copy this file to config.yaml and edit it. config.yaml is gitignored.
+
+platform:
+  # rnk-rpi service base URL
+  base_url: "http://192.168.1.20:5000"
+  request_timeout_s: 10
+  # true = 640x480 snapshot, false = full 1920x1080
+  snapshot_scaled: true
+  # after scheduling a move/rotate, poll GET /rnk/schedule until it's done
+  poll_interval_s: 0.5
+  poll_timeout_s: 60
+
+llm:
+  # LM Studio's OpenAI-compatible server (Developer tab -> "Start Server")
+  base_url: "http://localhost:1234/v1"
+  # "auto" = ask LM Studio for /v1/models and use the first one listed.
+  # Set an exact id (as shown by `curl http://localhost:1234/v1/models`
+  # or the LM Studio UI) if you want a specific model instead.
+  model: "auto"
+  # LM Studio doesn't check this, but the API shape requires some value
+  api_key: "lm-studio"
+  temperature: 0.2
+  max_tokens: 600
+  request_timeout_s: 120
+
+loop:
+  # pause between iterations once a command has finished
+  interval_s: 1.0
+  # 0 = run forever
+  max_iterations: 0
+  # per-iteration snapshots + raw LLM I/O get dropped here for debugging
+  log_dir: "logs"
+  # todo.json / observations.json (agent-writable scratch state) live here
+  state_dir: "state"
+  system_prompt_path: "prompts/system_prompt.txt"
