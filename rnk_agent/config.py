@@ -39,11 +39,22 @@ class LLMConfig:
 @dataclass
 class LoopConfig:
     interval_s: float = 1.0
+    # extra pause after a ptz_absolute/ptz_relative/ptz_home action, on top of
+    # interval_s - the platform reports "not moving" a bit before the camera
+    # has actually visually settled, so the next snapshot can still be stale
+    camera_settle_extra_s: float = 1.0
     max_iterations: int = 0
     log_dir: str = "logs"
     # where todo.json / observations.json (agent scratch state) are persisted
     state_dir: str = "state"
     system_prompt_path: str = "prompts/system_prompt.txt"
+    # sub-prompts for the %%TODO%%/%%OBSERVATIONS%%/%%CAMERA%%/%%TIME%%
+    # placeholders in system_prompt_path - each is substituted with its
+    # rendered section, or "" if that section has nothing to show
+    todo_section_path: str = "prompts/sections/todo.txt"
+    observations_section_path: str = "prompts/sections/observations.txt"
+    camera_section_path: str = "prompts/sections/camera.txt"
+    time_section_path: str = "prompts/sections/time.txt"
 
 
 @dataclass

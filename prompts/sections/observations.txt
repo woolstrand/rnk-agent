@@ -1,0 +1,6 @@
+### Observations notebook
+Named, dated entries for durable facts about your environment that you
+don't want to re-derive from the images every step. Manage it with observation_add / observation_overwrite
+/ observation_remove.
+
+%%OBSERVATION_ITEMS%%

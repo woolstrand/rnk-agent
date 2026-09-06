@@ -55,10 +55,11 @@ class TodoList:
         del self._items[item_id]
         self._save()
 
-    def render(self) -> str:
+    def render_items(self) -> str:
+        """Render just the item list ([x]/[ ] + text per id), or "" if empty."""
         if not self._items:
-            return "Todo list: (empty)"
-        lines = ["Todo list (id: [x]=done / [ ]=pending):"]
+            return ""
+        lines = []
         for item in sorted(self._items.values(), key=lambda i: i.id):
             box = "x" if item.checked else " "
             lines.append(f"  {item.id}. [{box}] {item.text}")
@@ -131,10 +132,11 @@ class ObservationsNotebook:
         del self._entries[name]
         self._save()
 
-    def render(self) -> str:
+    def render_items(self) -> str:
+        """Render just the entry list (name/timestamps/text), or "" if empty."""
         if not self._entries:
-            return "Observations notebook: (empty)"
-        lines = ["Observations notebook:"]
+            return ""
+        lines = []
         for entry in sorted(self._entries.values(), key=lambda e: e.name):
             lines.append(f"  [{entry.name}] (created {entry.created_at}, updated {entry.updated_at}):")
             lines.append(f"    {entry.text}")

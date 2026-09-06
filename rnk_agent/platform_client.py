@@ -72,13 +72,15 @@ class PlatformClient:
     # -- camera ------------------------------------------------------------
 
     def camera_ptz_absolute(self, pan: float, tilt: float, zoom: float | None = None) -> dict[str, Any]:
-        payload: dict[str, Any] = {"pan": pan, "tilt": tilt}
+        # this camera's hardware pans opposite to the documented convention
+        # (positive pan = look right) - negate here so callers/prompt stay correct
+        payload: dict[str, Any] = {"pan": -pan, "tilt": tilt}
         if zoom is not None:
             payload["zoom"] = zoom
         return self._request("POST", "/rnk/camera/ptz/absolute", json=payload)
 
     def camera_ptz_relative(self, pan: float, tilt: float, zoom: float | None = None) -> dict[str, Any]:
-        payload: dict[str, Any] = {"pan": pan, "tilt": tilt}
+        payload: dict[str, Any] = {"pan": -pan, "tilt": tilt}
         if zoom is not None:
             payload["zoom"] = zoom
         return self._request("POST", "/rnk/camera/ptz/relative", json=payload)
@@ -110,3 +112,15 @@ class PlatformClient:
         if not resp.ok:
             raise PlatformError(f"GET /rnk/camera/snapshot -> {resp.status_code}: {resp.text}")
         return resp.content
+
+    # -- speech ------------------------------------------------------------
+
+    def say(self, text: str, volume: float) -> dict[str, Any]:
+        """Speak through the platform's speaker.
+
+        TODO: no rpi API endpoint for this yet - once one exists, replace the
+        log line below with a POST like the other methods above.
+        """
+        print(f"[SAY] volume={volume} text={text!r}")
+        return {"status": "ok", "text": text, "volume": volume}
+

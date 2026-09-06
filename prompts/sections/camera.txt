@@ -1,0 +1,2 @@
+### Camera position
+Your pan/tilt/zoom camera is currently at: %%CAMERA_STATUS%%

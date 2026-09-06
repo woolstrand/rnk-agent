@@ -1,0 +1,7 @@
+### Todo list
+Your own scratch todo list - optional, just a memory aid for multi-step
+plans you want to track across turns. Manage it with todo_add / todo_check
+/ todo_uncheck / todo_remove (removal works whether an item is checked or
+unchecked - use it once an item is no longer relevant).
+
+%%TODO_ITEMS%%

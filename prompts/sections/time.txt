@@ -1,0 +1,4 @@
+### Time
+Current time (UTC): %%CURRENT_TIME%%
+Previous step time (UTC): %%PREVIOUS_STEP_TIME%%
+Use the elapsed time to judge whether your last action had a chance to finish.

@@ -19,13 +19,17 @@ llm:
   model: "auto"
   # LM Studio doesn't check this, but the API shape requires some value
   api_key: "lm-studio"
-  temperature: 0.2
-  max_tokens: 600
+  temperature: 0.7
+  max_tokens: 1800
   request_timeout_s: 120
 
 loop:
   # pause between iterations once a command has finished
   interval_s: 1.0
+  # extra pause after any ptz_absolute/ptz_relative/ptz_home action, since
+  # the platform can report "not moving" slightly before the camera has
+  # actually visually settled
+  camera_settle_extra_s: 1.0
   # 0 = run forever
   max_iterations: 0
   # per-iteration snapshots + raw LLM I/O get dropped here for debugging
@@ -33,3 +37,10 @@ loop:
   # todo.json / observations.json (agent-writable scratch state) live here
   state_dir: "state"
   system_prompt_path: "prompts/system_prompt.txt"
+  # sub-prompts substituted into the %%TODO%%/%%OBSERVATIONS%%/%%CAMERA%%/
+  # %%TIME%% placeholders of system_prompt_path (each becomes "" if that
+  # section has nothing to show, e.g. an empty todo list)
+  todo_section_path: "prompts/sections/todo.txt"
+  observations_section_path: "prompts/sections/observations.txt"
+  camera_section_path: "prompts/sections/camera.txt"
+  time_section_path: "prompts/sections/time.txt"

@@ -1,0 +1,11 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../rnk-server/api_docs"
+		}
+	],
+	"settings": {}
+}
