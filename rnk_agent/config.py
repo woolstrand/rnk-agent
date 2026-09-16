@@ -27,6 +27,17 @@ class PlatformConfig:
 
 
 @dataclass
+class TTSConfig:
+    """Local speech synthesis (macOS `say`), used by PlatformClient.say()."""
+
+    # empty = macOS's default system voice
+    voice: str = ""
+    # words per minute; None = macOS's default rate
+    rate: int | None = None
+    timeout_s: float = 30.0
+
+
+@dataclass
 class LLMConfig:
     base_url: str = "http://localhost:1234/v1"
     model: str = "auto"
@@ -60,6 +71,7 @@ class LoopConfig:
 @dataclass
 class AppConfig:
     platform: PlatformConfig = field(default_factory=PlatformConfig)
+    tts: TTSConfig = field(default_factory=TTSConfig)
     llm: LLMConfig = field(default_factory=LLMConfig)
     loop: LoopConfig = field(default_factory=LoopConfig)
 
@@ -78,6 +90,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         raw = yaml.safe_load(f) or {}
 
     return AppConfig(
+        tts=TTSConfig(**raw.get("tts", {})),
         platform=PlatformConfig(**raw.get("platform", {})),
         llm=LLMConfig(**raw.get("llm", {})),
         loop=LoopConfig(**raw.get("loop", {})),

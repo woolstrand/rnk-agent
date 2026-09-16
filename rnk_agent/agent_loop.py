@@ -250,7 +250,7 @@ def _build_system_prompt(
 
 
 def run_loop(config: AppConfig) -> None:
-    platform = PlatformClient(config.platform)
+    platform = PlatformClient(config.platform, config.tts)
     llm = LLMClient(config.llm)
 
     base_system_prompt = _resolve_prompt_path(config.loop.system_prompt_path).read_text()

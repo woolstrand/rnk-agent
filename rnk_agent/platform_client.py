@@ -11,7 +11,8 @@ from typing import Any
 
 import requests
 
-from rnk_agent.config import PlatformConfig
+from rnk_agent.config import PlatformConfig, TTSConfig
+from rnk_agent.tts import TTSError, synthesize
 
 
 class PlatformError(RuntimeError):
@@ -24,10 +25,11 @@ class ScheduleResult:
 
 
 class PlatformClient:
-    def __init__(self, config: PlatformConfig):
+    def __init__(self, config: PlatformConfig, tts_config: TTSConfig | None = None):
         self._config = config
         self._base_url = config.base_url.rstrip("/")
         self._timeout = config.request_timeout_s
+        self._tts_config = tts_config or TTSConfig()
 
     # -- low level -----------------------------------------------------
 
@@ -118,9 +120,20 @@ class PlatformClient:
     def say(self, text: str, volume: float) -> dict[str, Any]:
         """Speak through the platform's speaker.
 
-        TODO: no rpi API endpoint for this yet - once one exists, replace the
-        log line below with a POST like the other methods above.
+        Synthesizes ``text`` locally (macOS `say`, see rnk_agent.tts) and
+        uploads the resulting audio to the rnk-rpi, which plays it on the
+        platform's speaker (POST /rnk/audio/play). ``volume`` is applied by
+        the rnk-rpi during playback.
         """
-        print(f"[SAY] volume={volume} text={text!r}")
-        return {"status": "ok", "text": text, "volume": volume}
+        try:
+            audio = synthesize(text, self._tts_config)
+        except TTSError as exc:
+            raise PlatformError(str(exc)) from exc
+        result = self._request(
+            "POST",
+            "/rnk/audio/play",
+            files={"audio": ("speech.aiff", audio, "audio/aiff")},
+            data={"volume": str(volume)},
+        )
+        return {**result, "text": text, "volume": volume}
 
