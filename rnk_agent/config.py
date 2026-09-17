@@ -126,6 +126,15 @@ class LoopConfig:
 
 
 @dataclass
+class DashboardConfig:
+    """Local web dashboard for browsing steps, see rnk_agent.web.server."""
+
+    enabled: bool = True
+    host: str = "0.0.0.0"
+    port: int = 8770
+
+
+@dataclass
 class AppConfig:
     platform: PlatformConfig = field(default_factory=PlatformConfig)
     tts: TTSConfig = field(default_factory=TTSConfig)
@@ -134,6 +143,7 @@ class AppConfig:
     audio_stream: AudioStreamConfig = field(default_factory=AudioStreamConfig)
     vad: VADConfig = field(default_factory=VADConfig)
     stt: STTConfig = field(default_factory=STTConfig)
+    dashboard: DashboardConfig = field(default_factory=DashboardConfig)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -157,4 +167,5 @@ def load_config(path: Path | None = None) -> AppConfig:
         audio_stream=AudioStreamConfig(**raw.get("audio_stream", {})),
         vad=VADConfig(**raw.get("vad", {})),
         stt=STTConfig(**raw.get("stt", {})),
+        dashboard=DashboardConfig(**raw.get("dashboard", {})),
     )

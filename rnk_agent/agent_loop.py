@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -16,6 +17,7 @@ from rnk_agent.mic_input import MicrophoneInputChannel
 from rnk_agent.notes import NoteError, ObservationsNotebook, TodoList
 from rnk_agent.platform_client import PlatformClient, PlatformError
 from rnk_agent.speech_pipeline import SpeechPipeline
+from rnk_agent.web.server import run_dashboard
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -261,6 +263,55 @@ def _build_system_prompt(
     return re.sub(r"\n{3,}", "\n\n", prompt)
 
 
+def _save_frame(frames_dir: Path, iteration: int, ts: str, jpeg_bytes: bytes) -> str:
+    """Write a step's JPEG snapshot and return its path relative to log_dir
+    (as referenced by step JSON records / the dashboard's /api/frames route)."""
+    filename = f"{iteration:05d}_{ts}.jpg"
+    (frames_dir / filename).write_bytes(jpeg_bytes)
+    return f"frames/{filename}"
+
+
+def _step_record(
+    iteration: int,
+    timestamp: str,
+    prev_frame: str,
+    current_frame: str,
+    heard_messages: list[str],
+    system_prompt: str,
+    user_text: str,
+    todo_snapshot: list[dict[str, Any]],
+    observations_snapshot: list[dict[str, Any]],
+    llm_error: str | None = None,
+    raw_reply: str | None = None,
+    parse_error: str | None = None,
+    thoughts: str = "",
+    reasoning: str = "",
+    commands: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Everything the dashboard needs to render one step - see rnk_agent.web.server."""
+    return {
+        "iteration": iteration,
+        "timestamp": timestamp,
+        "prev_frame": prev_frame,
+        "current_frame": current_frame,
+        "heard_messages": heard_messages,
+        "system_prompt": system_prompt,
+        "user_text": user_text,
+        "llm_error": llm_error,
+        "raw_reply": raw_reply,
+        "parse_error": parse_error,
+        "thoughts": thoughts,
+        "reasoning": reasoning,
+        "commands": commands or [],
+        "todo": todo_snapshot,
+        "observations": observations_snapshot,
+    }
+
+
+def _write_step_record(steps_dir: Path, iteration: int, ts: str, record: dict[str, Any]) -> None:
+    (steps_dir / f"{iteration:05d}_{ts}.json").write_text(json.dumps(record, indent=2))
+
+
 def run_loop(config: AppConfig) -> None:
     platform = PlatformClient(config.platform, config.tts)
     llm = LLMClient(config.llm)
@@ -270,6 +321,10 @@ def run_loop(config: AppConfig) -> None:
 
     log_dir = Path(config.loop.log_dir)
     log_dir.mkdir(parents=True, exist_ok=True)
+    frames_dir = log_dir / "frames"
+    frames_dir.mkdir(parents=True, exist_ok=True)
+    steps_dir = log_dir / "steps"
+    steps_dir.mkdir(parents=True, exist_ok=True)
 
     state_dir = Path(config.loop.state_dir)
     state_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +341,17 @@ def run_loop(config: AppConfig) -> None:
     print(f"Platform: {config.platform.base_url}")
     print("Type a line + Enter at any time to have the robot 'hear' it on its next step.")
 
+    if config.dashboard.enabled:
+        threading.Thread(
+            target=run_dashboard,
+            args=(log_dir, config.dashboard.host, config.dashboard.port),
+            daemon=True,
+        ).start()
+        print(f"Dashboard: http://{config.dashboard.host}:{config.dashboard.port}")
+
     previous_frame = platform.camera_snapshot()
+    initial_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    previous_frame_path = _save_frame(frames_dir, 0, initial_ts, previous_frame)
     last_action: dict[str, Any] | None = None
     last_result = ""
     last_thoughts = ""
@@ -303,7 +368,8 @@ def run_loop(config: AppConfig) -> None:
         now = datetime.now(timezone.utc)
         ts = now.strftime("%Y%m%dT%H%M%S%fZ")
         current_time = now.isoformat(timespec="seconds")
-        (log_dir / f"{ts}_step{iteration:04d}.jpg").write_bytes(current_frame)
+        current_frame_path = _save_frame(frames_dir, iteration, ts, current_frame)
+        step_prev_frame_path = previous_frame_path  # this iteration's "previous", before any update below
 
         try:
             camera_status = platform.camera_status()
@@ -324,12 +390,32 @@ def run_loop(config: AppConfig) -> None:
         system_prompt = _build_system_prompt(
             base_system_prompt, section_templates, todo, notebook, camera_status, current_time, previous_step_time
         )
+        # snapshot todo/observations as fed into this step's prompt, before this step's own actions run
+        todo_snapshot = todo.items()
+        observations_snapshot = notebook.entries()
 
         print(f"\n=== Step {iteration} ===")
         try:
             raw_reply = llm.chat(system_prompt, user_text, previous_frame, current_frame)
         except LLMError as exc:
             print(f"[llm error] {exc}")
+            _write_step_record(
+                steps_dir,
+                iteration,
+                ts,
+                _step_record(
+                    iteration,
+                    current_time,
+                    step_prev_frame_path,
+                    current_frame_path,
+                    heard_messages,
+                    system_prompt,
+                    user_text,
+                    todo_snapshot,
+                    observations_snapshot,
+                    llm_error=str(exc),
+                ),
+            )
             time.sleep(config.loop.interval_s)
             continue
 
@@ -343,6 +429,25 @@ def run_loop(config: AppConfig) -> None:
             last_result = f"error: could not parse previous reply ({exc})"
             last_thoughts = ""
             previous_frame = current_frame
+            previous_frame_path = current_frame_path
+            _write_step_record(
+                steps_dir,
+                iteration,
+                ts,
+                _step_record(
+                    iteration,
+                    current_time,
+                    step_prev_frame_path,
+                    current_frame_path,
+                    heard_messages,
+                    system_prompt,
+                    user_text,
+                    todo_snapshot,
+                    observations_snapshot,
+                    raw_reply=raw_reply,
+                    parse_error=str(exc),
+                ),
+            )
             time.sleep(config.loop.interval_s)
             continue
 
@@ -365,9 +470,47 @@ def run_loop(config: AppConfig) -> None:
                 break  # skip the rest of this turn's actions after a failure
         last_result = f"{'error' if had_error else 'ok'}: {json.dumps(results)[:800]}"
 
+        commands = []
+        for idx, step_action in enumerate(action_obj["actions"]):
+            if idx < len(results):
+                res = results[idx]
+                if "error" in res:
+                    commands.append(
+                        {"action": step_action["action"], "params": step_action["params"], "status": "error", "result": None, "error": res["error"]}
+                    )
+                else:
+                    commands.append(
+                        {"action": step_action["action"], "params": step_action["params"], "status": "ok", "result": res["ok"], "error": None}
+                    )
+            else:
+                commands.append(
+                    {"action": step_action["action"], "params": step_action["params"], "status": "skipped", "result": None, "error": None}
+                )
+        _write_step_record(
+            steps_dir,
+            iteration,
+            ts,
+            _step_record(
+                iteration,
+                current_time,
+                step_prev_frame_path,
+                current_frame_path,
+                heard_messages,
+                system_prompt,
+                user_text,
+                todo_snapshot,
+                observations_snapshot,
+                raw_reply=raw_reply,
+                thoughts=thoughts,
+                reasoning=action_obj["reasoning"],
+                commands=commands,
+            ),
+        )
+
         last_action = action_obj
         last_thoughts = thoughts
         previous_frame = current_frame
+        previous_frame_path = current_frame_path
         previous_step_time = current_time
 
         sleep_s = config.loop.interval_s

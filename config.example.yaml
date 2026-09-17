@@ -78,6 +78,13 @@ loop:
   max_iterations: 0
   # per-iteration snapshots + raw LLM I/O get dropped here for debugging
   log_dir: "logs"
+
+dashboard:
+  # local web dashboard for browsing steps as they happen (see
+  # rnk_agent.web.server) - reads straight from loop.log_dir
+  enabled: true
+  host: "0.0.0.0"
+  port: 8770
   # todo.json / observations.json (agent-writable scratch state) live here
   state_dir: "state"
   system_prompt_path: "prompts/system_prompt.txt"

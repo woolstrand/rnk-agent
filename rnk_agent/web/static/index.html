@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>RNK Agent Dashboard</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>RNK Agent Dashboard</h1>
+    <div class="controls">
+      <span id="followState" class="badge badge-ok">following latest</span>
+      <button id="followBtn">Follow latest</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="panel step-list-panel">
+      <h2>Steps</h2>
+      <ul id="stepList" class="step-list"></ul>
+    </aside>
+
+    <section class="panel detail-panel">
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="main">Main</button>
+        <button class="tab-btn" data-tab="debug">Debug</button>
+      </div>
+
+      <div id="emptyState" class="empty-state">No step selected yet.</div>
+
+      <div id="mainTab" class="tab-content hidden">
+        <div class="frames-row">
+          <div class="frame-box">
+            <div class="frame-label">Previous frame</div>
+            <img id="prevFrame" alt="previous frame" />
+          </div>
+          <div class="frame-box">
+            <div class="frame-label">Current frame</div>
+            <img id="currentFrame" alt="current frame" />
+          </div>
+        </div>
+
+        <div class="field-error hidden" id="llmError"></div>
+        <div class="field-error hidden" id="parseError"></div>
+
+        <section class="field">
+          <h3>Transcribed audio</h3>
+          <ul id="heardList" class="plain-list"></ul>
+        </section>
+
+        <section class="field">
+          <h3>Todo list</h3>
+          <ul id="todoList" class="plain-list"></ul>
+        </section>
+
+        <section class="field">
+          <h3>Observations</h3>
+          <ul id="obsList" class="plain-list"></ul>
+        </section>
+
+        <section class="field">
+          <h3>Model reply (no JSON)</h3>
+          <pre id="thoughts"></pre>
+        </section>
+
+        <section class="field">
+          <h3>Reasoning</h3>
+          <pre id="reasoning"></pre>
+        </section>
+
+        <section class="field">
+          <h3>Commands</h3>
+          <ul id="commandsList" class="commands-list"></ul>
+        </section>
+      </div>
+
+      <div id="debugTab" class="tab-content hidden">
+        <section class="field">
+          <h3>System prompt</h3>
+          <pre id="systemPrompt"></pre>
+        </section>
+        <section class="field">
+          <h3>User message</h3>
+          <pre id="userText"></pre>
+        </section>
+        <section class="field">
+          <h3>Raw model reply</h3>
+          <pre id="rawReply"></pre>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <script src="/app.js"></script>
+</body>
+</html>

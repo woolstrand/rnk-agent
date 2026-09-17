@@ -65,6 +65,13 @@ class TodoList:
             lines.append(f"  {item.id}. [{box}] {item.text}")
         return "\n".join(lines)
 
+    def items(self) -> list[dict[str, Any]]:
+        """Structured snapshot (for the dashboard), ordered by id."""
+        return [
+            {"id": i.id, "text": i.text, "checked": i.checked}
+            for i in sorted(self._items.values(), key=lambda i: i.id)
+        ]
+
     def _set_checked(self, item_id: int, checked: bool) -> TodoItem:
         item = self._items.get(item_id)
         if item is None:
@@ -141,6 +148,13 @@ class ObservationsNotebook:
             lines.append(f"  [{entry.name}] (created {entry.created_at}, updated {entry.updated_at}):")
             lines.append(f"    {entry.text}")
         return "\n".join(lines)
+
+    def entries(self) -> list[dict[str, Any]]:
+        """Structured snapshot (for the dashboard), ordered by name."""
+        return [
+            {"name": e.name, "text": e.text, "created_at": e.created_at, "updated_at": e.updated_at}
+            for e in sorted(self._entries.values(), key=lambda e: e.name)
+        ]
 
     def _save(self) -> None:
         if not self._path:
