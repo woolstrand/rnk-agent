@@ -62,6 +62,10 @@ class PlatformClient:
     def schedule_status(self) -> dict[str, Any]:
         return self._request("GET", "/rnk/schedule")
 
+    def reset_errors(self) -> dict[str, Any]:
+        """Clear a recorded stall/obstacle error, re-enabling new move/rotate commands."""
+        return self._request("POST", "/rnk/errors/reset")
+
     def wait_until_idle(self) -> dict[str, Any]:
         """Poll GET /rnk/schedule until the queue is empty and nothing is running."""
         deadline = time.monotonic() + self._config.poll_timeout_s

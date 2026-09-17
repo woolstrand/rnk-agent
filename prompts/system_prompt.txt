@@ -37,6 +37,11 @@ sequence in the same turn (see Rules below):
 - say: speak out loud through the robot's onboard speaker.
     params: {"text": "<string>", "volume": number 0.0-1.0}
     Use this to communicate with people near the robot.
+- reset_errors: clear a motor stall/obstacle error reported by the platform,
+    re-enabling move/rotate. params: {} (empty).
+    Only use this once whatever caused the stall (an obstacle, a stuck
+    wheel) is actually resolved - otherwise the next move/rotate will just
+    fail again the same way.
 - todo_add: add an item to your todo list. params: {"text": "<string>"}
     Use this to note follow-up steps or things to check later.
 - todo_check: mark a todo item as done, without removing it. params: {"id": <int>}

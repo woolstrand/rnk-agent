@@ -15,6 +15,7 @@ from rnk_agent.llm_client import LLMClient, LLMError
 from rnk_agent.mic_input import MicrophoneInputChannel
 from rnk_agent.notes import NoteError, ObservationsNotebook, TodoList
 from rnk_agent.platform_client import PlatformClient, PlatformError
+from rnk_agent.speech_pipeline import SpeechPipeline
 
 _JSON_BLOCK_RE = re.compile(r"\{.*\}", re.DOTALL)
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
@@ -26,6 +27,7 @@ VALID_ACTIONS = {
     "ptz_relative",
     "ptz_home",
     "say",
+    "reset_errors",
     "todo_add",
     "todo_check",
     "todo_uncheck",
@@ -127,6 +129,9 @@ def execute_action(
         return result
     if action == "say":
         return platform.say(str(params["text"]), float(params.get("volume", 1.0)))
+    if action == "reset_errors":
+        platform.reset_errors()
+        return {"status": "ok"}
     if action == "todo_add":
         item = todo.add(str(params["text"]))
         return {"status": "ok", "id": item.id}
@@ -159,11 +164,18 @@ def _build_user_text(
     last_result: str,
     last_thoughts: str,
     heard_messages: list[str],
+    motor_error: dict[str, Any] | None,
 ) -> str:
     lines = [f"Step {iteration}."]
     if last_thoughts:
         lines.append("Your previous thoughts (free-form, written before last step's JSON action):")
         lines.append(last_thoughts)
+    if motor_error:
+        lines.append(
+            f"The platform reports a motor error ({motor_error.get('message')}), likely a stall "
+            "or an obstacle blocking a wheel. move/rotate will keep failing until you clear this "
+            "with the reset_errors action - do that once it's safe to move again."
+        )
     if heard_messages:
         lines.append(
             "Audio picked up by the platform's onboard microphone since your last step, "
@@ -264,6 +276,10 @@ def run_loop(config: AppConfig) -> None:
     todo = TodoList(state_dir / "todo.json")
     notebook = ObservationsNotebook(state_dir / "observations.json")
     microphone = MicrophoneInputChannel()
+    speech_pipeline = SpeechPipeline(
+        config.audio_stream, config.vad, config.stt, on_transcript=microphone.push
+    )
+    speech_pipeline.start()
 
     model = llm.resolve_model()
     print(f"Using LLM model: {model}")
@@ -295,8 +311,16 @@ def run_loop(config: AppConfig) -> None:
             print(f"[camera status error] {exc}")
             camera_status = None
 
+        try:
+            motor_error = platform.schedule_status().get("error")
+        except PlatformError as exc:
+            print(f"[schedule status error] {exc}")
+            motor_error = None
+
         heard_messages = microphone.poll()
-        user_text = _build_user_text(iteration, last_action, last_result, last_thoughts, heard_messages)
+        user_text = _build_user_text(
+            iteration, last_action, last_result, last_thoughts, heard_messages, motor_error
+        )
         system_prompt = _build_system_prompt(
             base_system_prompt, section_templates, todo, notebook, camera_status, current_time, previous_step_time
         )

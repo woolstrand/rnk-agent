@@ -12,6 +12,11 @@ cp config.example.yaml config.yaml   # then edit platform.base_url etc.
 (`config.yaml` is gitignored - `main.py` also auto-creates it from
 `config.example.yaml` on first run if you skip this step.)
 
+The first time speech input runs, `faster-whisper` downloads the
+configured model (`stt.model_size` in `config.yaml`, `"base"` by default)
+from Hugging Face and caches it locally - this needs an internet
+connection once, and takes a moment.
+
 ## 2. Start LM Studio
 
 * Open LM Studio, load a vision-capable model, go to the **Developer** tab
@@ -56,6 +61,13 @@ command anyway, so nothing is left mid-motion).
 * Type a line of text + `Enter` in the same terminal at any time - the
   agent will "hear" it (via the onboard-microphone stand-in) on its next
   step, though it's free to ignore it.
+* Speaking near the platform works the same way: audio streamed from the
+  rnk-rpi is transcribed locally (VAD + faster-whisper) and fed in as if
+  it were typed. Watch for `[audio] connected to ...` in the console to
+  confirm the mic stream is flowing, and `[speech] heard: "..."` when an
+  utterance is transcribed. If the Pi's camera has no audio track (or
+  isn't configured), rnk-rpi disables streaming and logs it there - this
+  agent will just keep retrying the connection.
 * Per-step camera frames are saved under `logs/`.
 * The agent's todo list and observations notebook are persisted as JSON
   under `state/` (`todo.json`, `observations.json`) and **survive restarts**

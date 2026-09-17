@@ -23,6 +23,50 @@ llm:
   max_tokens: 1800
   request_timeout_s: 120
 
+audio_stream:
+  # rnk-rpi's continuous audio-capture TCP stream (see rnk-rpi's
+  # app/audio/capture_constants.py - sample_rate/channels/sample_width must
+  # match what's configured there)
+  host: "192.168.1.20"
+  port: 5001
+  sample_rate: 16000
+  channels: 1
+  sample_width: 2
+  connect_timeout_s: 5.0
+  reconnect_interval_s: 2.0
+
+vad:
+  # webrtcvad aggressiveness: 0 (least aggressive, more false positives)
+  # .. 3 (most aggressive) - 3 filters out background noise (footsteps,
+  # appliance humming, ...) much better than lower settings
+  aggressiveness: 3
+  frame_ms: 20
+  # rolling buffer kept before speech is detected, so an utterance keeps
+  # the audio right before it was flagged as speech
+  pre_roll_ms: 300
+  # consecutive speech-classified audio needed to trigger an utterance start
+  # - kept generous so brief noise bursts (a footstep, a door) don't start one
+  speech_start_ms: 300
+  # minimum loudness (dBFS, 0 = full scale) for a frame to ever count as
+  # speech, regardless of what webrtcvad says - filters out quiet but
+  # broadband background noise (appliance humming, etc.) a sensitive mic
+  # picks up. Raise (toward 0) if quiet noise still triggers false starts;
+  # lower (more negative) if quiet speech is being ignored.
+  min_speech_dbfs: -40.0
+  # consecutive silence needed to finalize an utterance - keep this
+  # generous enough that a short mid-sentence pause doesn't cut it short
+  silence_hangover_ms: 800
+  # safety cap so a single utterance can't grow unbounded
+  max_utterance_s: 30
+
+stt:
+  engine: "faster-whisper"
+  model_size: "base"
+  # "ru", "en", ... or "" to auto-detect
+  language: "ru"
+  device: "cpu"
+  compute_type: "int8"
+
 loop:
   # pause between iterations once a command has finished
   interval_s: 1.0
