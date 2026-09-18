@@ -34,10 +34,12 @@
           <div class="frame-box">
             <div class="frame-label">Previous frame</div>
             <img id="prevFrame" alt="previous frame" />
+            <div id="prevFrameOffline" class="frame-offline hidden">camera offline</div>
           </div>
           <div class="frame-box">
             <div class="frame-label">Current frame</div>
             <img id="currentFrame" alt="current frame" />
+            <div id="currentFrameOffline" class="frame-offline hidden">camera offline</div>
           </div>
         </div>
 
@@ -46,6 +48,7 @@
 
         <section class="field">
           <h3>Transcribed audio</h3>
+          <div id="audioOffline" class="field-error hidden">Audio offline - microphone feed unavailable this step.</div>
           <ul id="heardList" class="plain-list"></ul>
         </section>
 
@@ -87,6 +90,10 @@
         <section class="field">
           <h3>Raw model reply</h3>
           <pre id="rawReply"></pre>
+        </section>
+        <section class="field">
+          <h3>Internal reasoning (debug only, not part of the response)</h3>
+          <pre id="llmReasoning"></pre>
         </section>
       </div>
     </section>

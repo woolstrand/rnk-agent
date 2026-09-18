@@ -27,6 +27,9 @@ class AudioStreamClient:
         self._on_chunk = on_chunk
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._run, name="rnk-audio-stream", daemon=True)
+        # read by agent_loop to tell the model when the mic feed is down,
+        # rather than it silently looking like nobody said anything
+        self.connected = False
 
     def start(self) -> None:
         self._thread.start()
@@ -56,6 +59,7 @@ class AudioStreamClient:
             (self._config.host, self._config.port), timeout=self._config.connect_timeout_s
         ) as sock:
             print(f"[audio] connected to {self._config.host}:{self._config.port}")
+            self.connected = True
             sock.settimeout(1.0)
             bytes_received = 0
             first_chunk = True
@@ -76,6 +80,7 @@ class AudioStreamClient:
                     except Exception as exc:  # noqa: BLE001 - a bad chunk must not drop the connection
                         print(f"[audio] error processing audio chunk: {exc!r}")
             finally:
+                self.connected = False
                 print(
                     f"[audio] disconnected from {self._config.host}:{self._config.port} "
                     f"({bytes_received} bytes received)"

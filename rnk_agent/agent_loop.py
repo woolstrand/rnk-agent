@@ -167,6 +167,7 @@ def _build_user_text(
     last_thoughts: str,
     heard_messages: list[str],
     motor_error: dict[str, Any] | None,
+    audio_connected: bool,
 ) -> str:
     lines = [f"Step {iteration}."]
     if last_thoughts:
@@ -178,7 +179,12 @@ def _build_user_text(
             "or an obstacle blocking a wheel. move/rotate will keep failing until you clear this "
             "with the reset_errors action - do that once it's safe to move again."
         )
-    if heard_messages:
+    if not audio_connected:
+        lines.append(
+            "Audio is offline this step - the agent can't reach the platform's microphone feed, "
+            "so you have no idea whether anyone said anything. Don't mistake this for silence."
+        )
+    elif heard_messages:
         lines.append(
             "Audio picked up by the platform's onboard microphone since your last step, "
             "i.e. someone talking near the robot. This is just something you overheard, "
@@ -271,18 +277,31 @@ def _save_frame(frames_dir: Path, iteration: int, ts: str, jpeg_bytes: bytes) ->
     return f"frames/{filename}"
 
 
+def _safe_snapshot(platform: PlatformClient) -> bytes | None:
+    """Camera snapshots can fail independently of the rest of the platform
+    (camera unreachable, ONVIF hiccup, ...) - never let that crash the loop,
+    just report vision as unavailable for this step (see llm_client._frame_content_part)."""
+    try:
+        return platform.camera_snapshot()
+    except PlatformError as exc:
+        print(f"[camera error] {exc}")
+        return None
+
+
 def _step_record(
     iteration: int,
     timestamp: str,
-    prev_frame: str,
-    current_frame: str,
+    prev_frame: str | None,
+    current_frame: str | None,
     heard_messages: list[str],
     system_prompt: str,
     user_text: str,
     todo_snapshot: list[dict[str, Any]],
     observations_snapshot: list[dict[str, Any]],
+    audio_connected: bool,
     llm_error: str | None = None,
     raw_reply: str | None = None,
+    llm_reasoning: str = "",
     parse_error: str | None = None,
     thoughts: str = "",
     reasoning: str = "",
@@ -295,10 +314,12 @@ def _step_record(
         "prev_frame": prev_frame,
         "current_frame": current_frame,
         "heard_messages": heard_messages,
+        "audio_connected": audio_connected,
         "system_prompt": system_prompt,
         "user_text": user_text,
         "llm_error": llm_error,
         "raw_reply": raw_reply,
+        "llm_reasoning": llm_reasoning,
         "parse_error": parse_error,
         "thoughts": thoughts,
         "reasoning": reasoning,
@@ -349,9 +370,11 @@ def run_loop(config: AppConfig) -> None:
         ).start()
         print(f"Dashboard: http://{config.dashboard.host}:{config.dashboard.port}")
 
-    previous_frame = platform.camera_snapshot()
+    previous_frame = _safe_snapshot(platform)
     initial_ts = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
-    previous_frame_path = _save_frame(frames_dir, 0, initial_ts, previous_frame)
+    previous_frame_path = (
+        _save_frame(frames_dir, 0, initial_ts, previous_frame) if previous_frame is not None else None
+    )
     last_action: dict[str, Any] | None = None
     last_result = ""
     last_thoughts = ""
@@ -364,11 +387,11 @@ def run_loop(config: AppConfig) -> None:
             print("Reached max_iterations, stopping.")
             break
 
-        current_frame = platform.camera_snapshot()
+        current_frame = _safe_snapshot(platform)
         now = datetime.now(timezone.utc)
         ts = now.strftime("%Y%m%dT%H%M%S%fZ")
         current_time = now.isoformat(timespec="seconds")
-        current_frame_path = _save_frame(frames_dir, iteration, ts, current_frame)
+        current_frame_path = _save_frame(frames_dir, iteration, ts, current_frame) if current_frame is not None else None
         step_prev_frame_path = previous_frame_path  # this iteration's "previous", before any update below
 
         try:
@@ -384,8 +407,9 @@ def run_loop(config: AppConfig) -> None:
             motor_error = None
 
         heard_messages = microphone.poll()
+        audio_connected = speech_pipeline.is_connected()
         user_text = _build_user_text(
-            iteration, last_action, last_result, last_thoughts, heard_messages, motor_error
+            iteration, last_action, last_result, last_thoughts, heard_messages, motor_error, audio_connected
         )
         system_prompt = _build_system_prompt(
             base_system_prompt, section_templates, todo, notebook, camera_status, current_time, previous_step_time
@@ -396,7 +420,7 @@ def run_loop(config: AppConfig) -> None:
 
         print(f"\n=== Step {iteration} ===")
         try:
-            raw_reply = llm.chat(system_prompt, user_text, previous_frame, current_frame)
+            chat_result = llm.chat(system_prompt, user_text, previous_frame, current_frame)
         except LLMError as exc:
             print(f"[llm error] {exc}")
             _write_step_record(
@@ -413,13 +437,18 @@ def run_loop(config: AppConfig) -> None:
                     user_text,
                     todo_snapshot,
                     observations_snapshot,
+                    audio_connected,
                     llm_error=str(exc),
                 ),
             )
             time.sleep(config.loop.interval_s)
             continue
 
+        raw_reply = chat_result.text
+        llm_reasoning = chat_result.reasoning
         print(f"--- raw model reply ---\n{raw_reply}\n-----------------------")
+        if llm_reasoning:
+            print(f"--- internal reasoning (debug only) ---\n{llm_reasoning}\n----------------------------------------")
 
         try:
             thoughts, action_obj = parse_action(raw_reply)
@@ -444,7 +473,9 @@ def run_loop(config: AppConfig) -> None:
                     user_text,
                     todo_snapshot,
                     observations_snapshot,
+                    audio_connected,
                     raw_reply=raw_reply,
+                    llm_reasoning=llm_reasoning,
                     parse_error=str(exc),
                 ),
             )
@@ -455,8 +486,20 @@ def run_loop(config: AppConfig) -> None:
 
         results: list[dict[str, Any]] = []
         had_error = False
+        error_kind: str | None = None
         camera_moved = False
         for step_action in action_obj["actions"]:
+            if had_error:
+                # a previous action in this step already failed - don't attempt the rest,
+                # but still report each of them explicitly so the model sees why next step
+                results.append(
+                    {
+                        "action": step_action["action"],
+                        "skipped": True,
+                        "reason": f"not executed - a previous action this step failed ({error_kind})",
+                    }
+                )
+                continue
             print(f"action: {step_action['action']} params: {step_action['params']}")
             try:
                 result = execute_action(platform, todo, notebook, step_action["action"], step_action["params"])
@@ -465,27 +508,23 @@ def run_loop(config: AppConfig) -> None:
                     camera_moved = True
             except (PlatformError, NoteError, KeyError, TypeError, ValueError) as exc:
                 print(f"[action error] {exc}")
-                results.append({"action": step_action["action"], "error": str(exc)})
+                is_hardware = isinstance(exc, PlatformError)
+                error_kind = "hardware/platform failure" if is_hardware else "invalid request"
+                results.append({"action": step_action["action"], "error": str(exc), "hardware": is_hardware})
                 had_error = True
-                break  # skip the rest of this turn's actions after a failure
         last_result = f"{'error' if had_error else 'ok'}: {json.dumps(results)[:800]}"
 
         commands = []
-        for idx, step_action in enumerate(action_obj["actions"]):
-            if idx < len(results):
-                res = results[idx]
-                if "error" in res:
-                    commands.append(
-                        {"action": step_action["action"], "params": step_action["params"], "status": "error", "result": None, "error": res["error"]}
-                    )
-                else:
-                    commands.append(
-                        {"action": step_action["action"], "params": step_action["params"], "status": "ok", "result": res["ok"], "error": None}
-                    )
+        for step_action, res in zip(action_obj["actions"], results):
+            if "ok" in res:
+                status, result_val, error_val = "ok", res["ok"], None
+            elif "error" in res:
+                status, result_val, error_val = "error", None, res["error"]
             else:
-                commands.append(
-                    {"action": step_action["action"], "params": step_action["params"], "status": "skipped", "result": None, "error": None}
-                )
+                status, result_val, error_val = "skipped", None, res.get("reason")
+            commands.append(
+                {"action": step_action["action"], "params": step_action["params"], "status": status, "result": result_val, "error": error_val}
+            )
         _write_step_record(
             steps_dir,
             iteration,
@@ -500,7 +539,9 @@ def run_loop(config: AppConfig) -> None:
                 user_text,
                 todo_snapshot,
                 observations_snapshot,
+                audio_connected,
                 raw_reply=raw_reply,
+                llm_reasoning=llm_reasoning,
                 thoughts=thoughts,
                 reasoning=action_obj["reasoning"],
                 commands=commands,

@@ -49,6 +49,11 @@ class SpeechPipeline:
         self._stop_event.set()
         self._client.stop()
 
+    def is_connected(self) -> bool:
+        """Whether the audio TCP stream is currently connected - False means
+        heard_messages being empty is due to the feed being down, not silence."""
+        return self._client.connected
+
     def _stt_loop(self) -> None:
         while not self._stop_event.is_set():
             try:

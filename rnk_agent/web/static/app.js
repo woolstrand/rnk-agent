@@ -11,8 +11,11 @@
 
   const prevFrame = document.getElementById('prevFrame');
   const currentFrame = document.getElementById('currentFrame');
+  const prevFrameOffline = document.getElementById('prevFrameOffline');
+  const currentFrameOffline = document.getElementById('currentFrameOffline');
   const llmErrorEl = document.getElementById('llmError');
   const parseErrorEl = document.getElementById('parseError');
+  const audioOfflineEl = document.getElementById('audioOffline');
   const heardList = document.getElementById('heardList');
   const todoList = document.getElementById('todoList');
   const obsList = document.getElementById('obsList');
@@ -22,6 +25,7 @@
   const systemPromptEl = document.getElementById('systemPrompt');
   const userTextEl = document.getElementById('userText');
   const rawReplyEl = document.getElementById('rawReply');
+  const llmReasoningEl = document.getElementById('llmReasoning');
 
   let steps = [];
   let selectedIteration = null; // null = follow latest
@@ -97,23 +101,25 @@
     }
   }
 
-  function setFrame(imgEl, relpath) {
+  function setFrame(imgEl, offlineEl, relpath) {
     imgEl.src = relpath ? `/api/frames/${relpath}` : '';
     imgEl.classList.toggle('hidden', !relpath);
+    offlineEl.classList.toggle('hidden', !!relpath);
   }
 
   function renderDetail(detail) {
     emptyState.classList.add('hidden');
     mainTab.classList.remove('hidden');
 
-    setFrame(prevFrame, detail.prev_frame);
-    setFrame(currentFrame, detail.current_frame);
+    setFrame(prevFrame, prevFrameOffline, detail.prev_frame);
+    setFrame(currentFrame, currentFrameOffline, detail.current_frame);
 
     llmErrorEl.textContent = detail.llm_error ? `LLM error: ${detail.llm_error}` : '';
     llmErrorEl.classList.toggle('hidden', !detail.llm_error);
     parseErrorEl.textContent = detail.parse_error ? `Parse error: ${detail.parse_error}` : '';
     parseErrorEl.classList.toggle('hidden', !detail.parse_error);
 
+    audioOfflineEl.classList.toggle('hidden', detail.audio_connected !== false);
     renderList(heardList, detail.heard_messages, (li, msg) => {
       li.textContent = msg;
     });
@@ -140,6 +146,7 @@
     systemPromptEl.textContent = detail.system_prompt || '';
     userTextEl.textContent = detail.user_text || '';
     rawReplyEl.textContent = detail.raw_reply || '(none)';
+    llmReasoningEl.textContent = detail.llm_reasoning || '(none)';
   }
 
   async function loadStepDetail(iteration) {
